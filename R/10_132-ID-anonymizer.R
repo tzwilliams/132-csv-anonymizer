@@ -36,16 +36,19 @@
 # 
 # Input stack:  
 #     filename                            source
-#       any ENGR 132 csv                    BlackBoard 
+#       one or more ENGR 132 csv            BlackBoard 
 # 
 # Package dependancies: 
 #    library(readr)  #read in csv files
 #    library(tibble) #tidy data frames
 #    library(tcltk)  #provides an OS independent way to select a folder
 #    library(beepr)  #audio notifaction for user input
+#    library(dplyr)  #data extraction and transformation
 #
 # Changelog:
-#     2018.05.08.    Initial code
+#     2018.05.08. Initial code
+#     2018.05.23. looking for IDs that already exist in the anon. tables
+#                 ensureing no duplicate anon. IDs are put into the tables
 #                   
 # Feature wishlist:  (*: planned but not complete)
 #     *              
@@ -60,6 +63,7 @@ library(readr)  #read in csv files
 library(tibble) #tidy data frames
 library(tcltk)  #provides an OS independent way to select a folder
 library(beepr)  #audio notifaction for user input
+library(dplyr)  #data extraction and transformation
 
 ######### Load external functions ##########
 
@@ -95,11 +99,11 @@ InteractiveSetDir <- function(msgToUser = "IMPORTANT: Select your directory.",
 #path of folder containing all CSVs to anonymize  
 path_dataFolder <- InteractiveSetDir(msgToUser = 
                                        "IMPORTANT: Select directory with CSVs to anonymize.", 
-                                     windowTitle = "Choose directory with DATA FILES to anonymize.")
-  
+                                     windowTitle = "Choose directory with CSV DATA FILES to anonymize.")
+
 #path of folder to save outputs
 path_outputFolder <- InteractiveSetDir(msgToUser = "IMPORTANT: Select your OUTPUT directory.", 
-                                             windowTitle = "Choose an output directory")
+                                       windowTitle = "Choose an output directory")
 
 
 ## Read in the data paths ####
@@ -129,8 +133,8 @@ num_dataFiles <- length(paths_dataFiles) # Counts the number of data files
 #   # saves the path to all the files ending with .csv in 'temp'
 #   temp <- list.files(path = file.path(num_dataFolders, pattern = ".csv")) 
 #   
-#   #grepl checks whether temp has any file that matches exactly as
-#   #commonFileName. If no file matches then !any is true and the code will be
+#   #grepl checks whether 'temp' has any file that matches exactly as
+#   #commonFileName. If no file matches then '!any' is true and the code will be
 #   #executed
 #   if(!any(grepl(pattern = commonFileName, 
 #                 x = temp, 
@@ -149,42 +153,80 @@ num_dataFiles <- length(paths_dataFiles) # Counts the number of data files
 
 
 
+## read or create (de)anonymization tables ####
+# see if any CSV files already exist in the output director; if so, save file paths
+paths_outputFiles <- list.files(path = file.path(path_outputFolder),
+                                full.names = T,
+                                pattern = ".csv")
+num_outputFiles <- length(paths_outputFiles) # Counts the number of data files
 
-## Create blank de-anonymization tables (separate student and grader tables) ####
-# create empty student de-anonymization table
-keyTable_studentIDs <- tibble()
-keyTable_studentIDs <- add_column(.data = keyTable_studentIDs, 
-                                  "origStuID" = "",
-                                  "anonStuID" = "",
-                                  "firstName" = "",
-                                  "lastName" = "")
 
-# create empty grader de-anonymization table
-keyTable_graderIDs <- tibble()
-keyTable_graderIDs <- add_column(.data = keyTable_graderIDs, 
-                                 "origGraderID" = "",
-                                 "anonGraderID" = "")
 
-## Loop through each CSV file in a given folder ####
+## read or create (de)anonymization tables (from or in output directory)
+# read or create STUDENT table
+if(any(grepl(pattern = "_ENGR132_anonymized_student_IDs.csv",
+             x = paths_outputFiles,
+             ignore.case = T))){
+  
+  # read in table if it already exists
+  keyTable_studentIDs <- read_csv(file = 
+                                    file.path(path_outputFolder, 
+                                              "_ENGR132_anonymized_student_IDs.csv"),
+                                  col_names = T)  
+}else{ 
+  # create empty student (de)anonymization table
+  keyTable_studentIDs <- tibble()
+  keyTable_studentIDs <- add_column(.data = keyTable_studentIDs, 
+                                    "origStuID" = "",
+                                    "anonStuID" = "",
+                                    "firstName" = "",
+                                    "lastName" = "")
+  
+}
+
+# read or create GRADER table
+if(any(grepl(pattern = "_ENGR132_anonymized_grader_IDs.csv",
+             x = paths_outputFiles,
+             ignore.case = T))){
+  
+  # read in table if it already exists
+  keyTable_graderIDs <- read_csv(file = 
+                                    file.path(path_outputFolder, 
+                                              "_ENGR132_anonymized_grader_IDs.csv"),
+                                  col_names = T)  
+  
+}else{ 
+  # create empty grader (de)anonymization table
+  keyTable_graderIDs <- tibble()
+  keyTable_graderIDs <- add_column(.data = keyTable_graderIDs, 
+                                   "origGraderID" = "",
+                                   "anonGraderID" = "")
+  
+}
+
+
+
+
+## Loop through each CSV data file in a given data folder ####
 for (curPath in paths_dataFiles) {
-  ### Read in CSV file ####
-  curDataFile <- read_csv(file = curPath, col_names = T, progress = T)
+  ### Read in a CSV data file ####
+  curData <- read_csv(file = curPath, col_names = T, progress = T)
   
   ### Store list of unique IDs ####
-  # STUDENTS (check for column existence, then store unique IDs from the correct column)
-  if(any(names(curDataFile) == "User ID")){
+  # STUDENTS (check for ID column existence, then store unique IDs from the correct column)
+  if(any(names(curData) == "User ID")){
     stuID_field <- "User ID"
-    curStuIDs <- unique(curDataFile$`User ID`)
-  }else if(any(names(curDataFile) == "Username")){
+    curStuIDs <- unique(curData$`User ID`)
+  }else if(any(names(curData) == "Username")){
     stuID_field <- "Username"
-    curStuIDs <- unique(curDataFile$Username)
+    curStuIDs <- unique(curData$Username)
   }else{
     stuID_field <- NULL
     curStuIDs <- NULL
   }
-  # GRADERS (check for column existence, if exists then store unique IDs)
-  if(any(names(curDataFile) == "Grader")){
-    curGraderIDs <- unique(curDataFile$Grader)
+  # GRADERS (check for ID column existence, if exists then store unique IDs)
+  if(any(names(curData) == "Grader")){
+    curGraderIDs <- unique(curData$Grader)
   }else{
     curGraderIDs <- NULL
   }
@@ -194,13 +236,13 @@ for (curPath in paths_dataFiles) {
 
   
   ### extract the current semester name ####
-  if(any(names(curDataFile) == "Course Name")){
-    curSemester <- paste0(regmatches(curDataFile$`Course Name`[1],
+  if(any(names(curData) == "Course Name")){
+    curSemester <- paste0(regmatches(curData$`Course Name`[1],
                             regexpr(pattern = "^[[:alpha:]]{2}",
-                                    text = curDataFile$`Course Name`[1])),
-                        regmatches(curDataFile$`Course Name`[1],
+                                    text = curData$`Course Name`[1])),
+                        regmatches(curData$`Course Name`[1],
                                    regexpr(pattern = "-[[:digit:]]{4}",
-                                           text = curDataFile$`Course Name`[1])))
+                                           text = curData$`Course Name`[1])))
   # abbreviate the current semester (first 2 letters of season + last 2 digits of year)
   curSemester <- paste0(substr(curSemester, 1, 2), 
                         substr(curSemester, 6, 7))
@@ -208,46 +250,105 @@ for (curPath in paths_dataFiles) {
     curSemester <- "unknown"
   }
   
-  ### Generate random ID in appropriate form ####
-  # STUDENTS: generate 6 digit random integer
-  randIntegers <- as.character(sample(100000:999999, length(curStuIDs)))
-  #build anon IDs                      
-  curStuAnonIDs  <- paste0("engr132_", curSemester, "Stu_", randIntegers)
- 
-  #GRADERS: generate 4 digit random integer
-  randIntegers <- as.character(sample(1000:9999, length(curGraderIDs)))
-  #build anon IDs 
-  #TODO(TW: format should be: 'engr132_Sp17X_1234'
-        # Where X =
-        #   ITS for the course staff
-        #   INST for instructors
-        #   GTA for grad TAs
-        #   PT for undergrad peer teachers
-        #   GR for undergrad graders)
-  curGraderAnonIDs  <- paste0("engr132_", curSemester, "Grader_", randIntegers)
+
   
-  ### TODO(TW: save first and last names for the students and save into the table) ####
-  
+
   ### Add each unique ID to the appropriate table ####
-  #save STUDENT ID pairs IF values exist in ID list
+  #save STUDENT information (ID, anon ID, name) if not already in the table
   if(length(curStuIDs) > 0){
-    keyTable_studentIDs <- add_row(.data = keyTable_studentIDs,
-                                 origStuID = curStuIDs,
-                                 anonStuID = curStuAnonIDs)
-  }
+    for (i in 1:length(curStuIDs)) {
+      #read current id 
+      curID <- curStuIDs[i]
+      
+      #check if current id already exists in the anon table
+      if(any(grepl(pattern = curID,
+                   x = keyTable_studentIDs$origStuID))){
+        curAnonID <- keyTable_studentIDs[keyTable_studentIDs$origStuID == curID,'anonStuID']
 
-  #save GRADER ID pairs IF values exist in ID list
+      }else{ #if curID is a new ID then add the student's information to the table
+
+        #generate new anon ID and check if it is already in use (if so, generate new ID)
+        repeat{
+          # generate a 6 digit random integer
+          randInteger <- as.character(sample(100000:999999, 1))
+          #build anon ID                  
+          curAnonID  <- paste0("engr132_", curSemester, "Stu_", randInteger)
+          
+          # leave the repeat loop if the newAnonID does NOT exist in the current table
+          if(!any(keyTable_studentIDs$anonStuID == curAnonID)){
+            break
+          }
+        } # end anon student ID generation loop
+
+        
+        #grab data that matches the current id, take the first row, extract the Name field
+        firstName = curData[curData$`User ID` == curStuIDs[i],][1,]$`First Name`
+        lastName  = curData[curData$`User ID` == curStuIDs[i],][1,]$`Last Name`
+        
+        #add student information to the anon table
+        keyTable_studentIDs <- add_row(.data = keyTable_studentIDs,
+                                       origStuID = curID,
+                                       anonStuID = curAnonID,
+                                       firstName = firstName,
+                                       lastName  = lastName)
+      }
+    }
+  } #end student table creation
+  
+  
+  #save GRADER information (ID, anon ID, name) if not already in the table
   if(length(curGraderIDs) > 0){
-    keyTable_graderIDs <- add_row(.data = keyTable_graderIDs,
-                                origGraderID = curGraderIDs,
-                                anonGraderID = curGraderAnonIDs)
-  }
-  ### TODO(TW:Verify the new ID does not already exist in the table) ####
+    for (i in 1:length(curGraderIDs)) {
+      #read current id 
+      curID <- curGraderIDs[i]
+      
+      #check if current id already exists in the anon table
+      if(any(grepl(pattern = curID,
+                   x = keyTable_graderIDs$origGraderID))){
+        curAnonID <- keyTable_graderIDs[keyTable_graderIDs$origGraderID == curID,'anonGraderID']
+        
+      }else{ #if curID is a new ID then add the grader's information to the table
+        
+        #generate new anon ID and check if it is already in use (if so, generate new ID)
+        repeat{
+          #generate 4 digit random integer
+          randInteger <- as.character(sample(1000:9999, 1))
+          #build anon ID 
+          #TODO(TW: format should be: 'engr132_Sp18XX_1234'
+          # Where XX =
+          #   ITS for the course staff
+          #   INST for instructors
+          #   GTA for grad TAs
+          #   PT for undergrad peer teachers
+          #   GR for undergrad graders;
+          #     I need to find out what the column actually looks like.  
+          #     I'm assuming that it is one of these XX codes followed by a number)
+          graderType  <- regmatches(curGraderIDs[i], 
+                                    regexpr(pattern = "^[[:alpha:]]*", 
+                                            text = curGraderIDs[i]))
+          curAnonID  <- paste0("engr132_", curSemester, graderType, "_", randInteger)          
+
+          # curAnonID  <- paste0("engr132_", curSemester, "Grader_", randInteger)                    
+          
+          # leave the repeat loop if the newAnonID does NOT exist in the current table
+          if(!any(keyTable_graderIDs$anonGraderID == curAnonID)){
+            break
+          }
+        } # end anon grader ID generation loop
+        
+
+        #add grader information to the anon table
+        keyTable_graderIDs <- add_row(.data = keyTable_graderIDs,
+                                      origGraderID = curID,
+                                      anonGraderID = curAnonID)
+      }
+    }
+  }  #end grader table creation
 
   
-  ### Clear first and last name columns ####
-  curDataFile$`First Name` <- ""
-  curDataFile$`Last Name` <- ""
+  ### Clear student first and last name columns ####
+  curData$`First Name` <- ""
+  curData$`Last Name` <- ""
   
   ### Loop through each anon table and conduct the ID replacement ####
   # STUDENTS
@@ -255,22 +356,24 @@ for (curPath in paths_dataFiles) {
     # find rows where the ID matches the currently indexed ID, 
     #   replace all mathes with the anon ID
     if(stuID_field == "User ID"){
-      curDataFile$`User ID`[curDataFile$`User ID` == 
+      curData$`User ID`[curData$`User ID` == 
                               keyTable_studentIDs$origStuID[i]] <- 
         keyTable_studentIDs$anonStuID[i]
+      
     }else if(stuID_field == "Username"){
-      curDataFile$Username[curDataFile$Username == 
+      curData$Username[curData$Username == 
                               keyTable_studentIDs$origStuID[i]] <- 
         keyTable_studentIDs$anonStuID[i]      
+      
     }#end if-else
-  }#end student loop
+  }#end student id replacement loop
   
   #GRADERS
   if(length(curGraderIDs) > 0){
     for (i in 1:nrow(keyTable_graderIDs)) {
       # find rows where the ID matches the currently indexed ID, 
       #   replace all mathes with the anon ID
-      curDataFile$Grader[curDataFile$Grader == 
+      curData$Grader[curData$Grader == 
                            keyTable_graderIDs$origGraderID[i]] <- 
         keyTable_graderIDs$anonGraderID[i]
     }#end grader loop
@@ -278,10 +381,11 @@ for (curPath in paths_dataFiles) {
   
   ### Save out the data with an appropriate filename ####
   message(paste0("\nSaving CSV file: '", paste0("anon_", basename(curPath), "'")))
-  write.csv(file = file.path(path_outputFolder, paste0("anon_", basename(curPath))),
-            x = curDataFile, row.names = FALSE)  
+  write.csv(file = file.path(path_outputFolder, 
+                             paste0("anon_", basename(curPath))),
+            x = curData, row.names = FALSE)  
   
-}#end of loop through CSV files in the data folder
+}#end of looping through CSV data files
 
 
 ## Save anon tables to file ####
