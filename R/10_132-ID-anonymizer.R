@@ -109,7 +109,8 @@ path_outputFolder <- InteractiveSetDir(msgToUser = "IMPORTANT: Select your OUTPU
 ## Read in the data paths ####
 paths_dataFiles <- list.files(path = file.path(path_dataFolder),
                               full.names = T,
-                              pattern = ".csv")
+                              pattern = ".csv", 
+                              recursive = T)
 num_dataFiles <- length(paths_dataFiles) # Counts the number of data files
 
 #### Buggy code for allowing there to be multiple separate folders within the base data folder ####
@@ -231,9 +232,9 @@ for (curPath in paths_dataFiles) {
     curGraderIDs <- NULL
   }
   
-  ### TODO(***TW: verify none of the IDs are already in the anon tables,  ####
-  #       if they are then skip creating a new value)
 
+  
+  
   
   ### extract the current semester name ####
   if(any(names(curData) == "Course Name")){
@@ -253,7 +254,7 @@ for (curPath in paths_dataFiles) {
 
   
 
-  ### Add each unique ID to the appropriate table ####
+  ### Add each unique ID to the appropriate table(Students then Graders) ####
   #save STUDENT information (ID, anon ID, name) if not already in the table
   if(length(curStuIDs) > 0){
     for (i in 1:length(curStuIDs)) {
@@ -323,12 +324,12 @@ for (curPath in paths_dataFiles) {
           #   GR for undergrad graders;
           #     I need to find out what the column actually looks like.  
           #     I'm assuming that it is one of these XX codes followed by a number)
-          graderType  <- regmatches(curGraderIDs[i], 
-                                    regexpr(pattern = "^[[:alpha:]]*", 
-                                            text = curGraderIDs[i]))
-          curAnonID  <- paste0("engr132_", curSemester, graderType, "_", randInteger)          
+          # graderType  <- regmatches(curGraderIDs[i],
+          #                           regexpr(pattern = "^[[:alpha:]]*",
+          #                                   text = curGraderIDs[i]))
+          # curAnonID  <- paste0("engr132_", curSemester, graderType, "_", randInteger)          
 
-          # curAnonID  <- paste0("engr132_", curSemester, "Grader_", randInteger)                    
+          curAnonID  <- paste0("engr132_", curSemester, "Grader_", randInteger)
           
           # leave the repeat loop if the newAnonID does NOT exist in the current table
           if(!any(keyTable_graderIDs$anonGraderID == curAnonID)){
@@ -380,9 +381,9 @@ for (curPath in paths_dataFiles) {
   }#end grader if
   
   ### Save out the data with an appropriate filename ####
-  message(paste0("\nSaving CSV file: '", paste0("anon_", basename(curPath), "'")))
+  message(paste0("\nSaving CSV file: '", paste0(basename(curPath),"_deID", "'")))
   write.csv(file = file.path(path_outputFolder, 
-                             paste0("anon_", basename(curPath))),
+                             paste0(basename(curPath), "_deID")),
             x = curData, row.names = FALSE)  
   
 }#end of looping through CSV data files
