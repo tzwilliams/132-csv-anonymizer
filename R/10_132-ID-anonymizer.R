@@ -44,11 +44,13 @@
 #    library(tcltk)  #provides an OS independent way to select a folder
 #    library(beepr)  #audio notifaction for user input
 #    library(dplyr)  #data extraction and transformation
+#    library(tools)  #needed for some filename manipulation
 #
 # Changelog:
 #     2018.05.08. Initial code
 #     2018.05.23. looking for IDs that already exist in the anon. tables
 #                 ensureing no duplicate anon. IDs are put into the tables
+#     2018.05.24. code review and updates
 #                   
 # Feature wishlist:  (*: planned but not complete)
 #     *              
@@ -64,6 +66,7 @@ library(tibble) #tidy data frames
 library(tcltk)  #provides an OS independent way to select a folder
 library(beepr)  #audio notifaction for user input
 library(dplyr)  #data extraction and transformation
+library(tools)  #needed for some filename manipulation
 
 ######### Load external functions ##########
 
@@ -381,9 +384,10 @@ for (curPath in paths_dataFiles) {
   }#end grader if
   
   ### Save out the data with an appropriate filename ####
-  message(paste0("\nSaving CSV file: '", paste0(basename(curPath),"_deID", "'")))
+  curFilenameSansExt <- file_path_sans_ext(basename(curPath))
+  message(paste0("\nSaving CSV file: '", paste0(curFilenameSansExt,"_deID", ".csv'")))
   write.csv(file = file.path(path_outputFolder, 
-                             paste0(basename(curPath), "_deID")),
+                             paste0(curFilenameSansExt, "_deID.csv")),
             x = curData, row.names = FALSE)  
   
 }#end of looping through CSV data files
